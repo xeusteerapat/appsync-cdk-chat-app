@@ -100,7 +100,7 @@ export class AppsyncCdkChatAppStack extends cdk.Stack {
     );
 
     // Define Graphql API
-    const api = new GraphqlApi(this, 'reacltime-chat-app-api', {
+    const api = new GraphqlApi(this, 'realtime-chat-app-api', {
       name: 'realtime-chat-app',
       logConfig: {
         fieldLogLevel: FieldLogLevel.ALL,
