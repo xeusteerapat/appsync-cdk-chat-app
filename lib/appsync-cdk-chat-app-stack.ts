@@ -98,5 +98,135 @@ export class AppsyncCdkChatAppStack extends cdk.Stack {
         actions: ['dynamodb:Query'],
       })
     );
+
+    // Define Graphql API
+    const api = new GraphqlApi(this, 'reacltime-chat-app-api', {
+      name: 'realtime-chat-app',
+      logConfig: {
+        fieldLogLevel: FieldLogLevel.ALL,
+      },
+      schema: Schema.fromAsset('graphql/schema.graphql'),
+      authorizationConfig: {
+        defaultAuthorization: {
+          authorizationType: AuthorizationType.USER_POOL,
+          userPoolConfig: { userPool },
+        },
+      },
+    });
+
+    new cdk.CfnOutput(this, 'GraphQLAPIURL', {
+      value: api.graphqlUrl,
+    });
+
+    // Add 2 tables resources
+    const messageTableDs = api.addDynamoDbDataSource('Message', messageTable);
+    const roomTableDs = api.addDynamoDbDataSource('Room', roomTable);
+
+    // Resolvers Method
+    messageTableDs.createResolver({
+      typeName: 'Query',
+      fieldName: 'listMessageForRoom',
+      requestMappingTemplate: MappingTemplate.fromString(`
+        {
+          "version": "2017-02-28",
+          "operation": "Query",
+          "query": {
+            "expression": "roomId = :roomId",
+            "expressionValue": {
+              ":roomId": $util.dynamodb.toDynamoDBJson($context.arguments.roomId)
+            }
+          }
+          #if( !$util.isNull($ctx.arguments.sortDirection)
+            && $ctx.arguments.sortDirection == "DESC" )
+            ,"scanIndexForward": false
+          #else
+            ,"scanIndexForward": true
+          #end
+          #if($context.arguments.nextToken)
+            ,"nextToken": "$context.arguments.nextToken"
+          #end
+        }
+      `),
+      responseMappingTemplate: MappingTemplate.fromString(`
+        #if( $ctx.error )
+          $util.error($ctx.error.message, $ctx.error.type)
+        #else
+          $util.toJson($ctx.result)
+        #end
+      `),
+    });
+
+    messageTableDs.createResolver({
+      typeName: 'Mutation',
+      fieldName: 'createMessage',
+      requestMappingTemplate: MappingTemplate.fromString(`
+        ## Automatically set the id if it's not passed in.
+          $util.qr($context.args.input.put("id", $util.defaultIfNull($ctx.args.input.id, $util.autoId())))
+        ## Automatically set the createdAt timestamp.
+        #set( $createdAt = $util.time.nowISO8601() )
+          util.qr($context.args.input.put("createdAt", $util.defaultIfNull($ctx.args.input.createdAt, $createdAt)))
+        ## Automatically set the user's username on owner field.
+          $util.qr($ctx.args.input.put("owner", $context.identity.username))
+        ## Create a condition that will error if the id already exists
+        #set( $condition = {
+          "expression": "attribute_not_exists(#id)",
+          "expressionNames": {
+              "#id": "id"
+          }
+          } )
+          {
+            "version": "2018-05-29",
+            "operation": "PutItem",
+            "key": {
+              "id":   $util.dynamodb.toDynamoDBJson($ctx.args.input.id)
+            },
+            "attributeValues": $util.dynamodb.toMapValuesJson($context.args.input),
+            "condition": $util.toJson($condition)
+          }
+  `),
+      responseMappingTemplate: MappingTemplate.dynamoDbResultItem(),
+    });
+
+    roomTableDs.createResolver({
+      typeName: 'Query',
+      fieldName: 'listRooms',
+      requestMappingTemplate: MappingTemplate.fromString(`
+        #set( $limit = $util.defaultIfNull($context.args.limit, 1000) )
+        #set( $ListRequest = {
+          "version": "2018-05-29",
+          "limit": $limit
+        } )
+        #if( $context.args.nextToken )
+          #set( $ListRequest.nextToken = $context.args.nextToken )
+        #end
+        $util.qr($ListRequest.put("operation", "Scan"))
+        $util.toJson($ListRequest)
+      `),
+      responseMappingTemplate: MappingTemplate.fromString(`
+        #if( $ctx.error)
+          $util.error($ctx.error.message, $ctx.error.type)
+        #else
+          $util.toJson($ctx.result)
+        #end
+      `),
+    });
+
+    roomTableDs.createResolver({
+      typeName: 'Mutation',
+      fieldName: 'createRoom',
+      requestMappingTemplate: MappingTemplate.fromString(`
+  $util.qr($context.args.input.put("id", $util.defaultIfNull($ctx.args.input.id, $util.autoId())))
+  {
+    "version": "2018-05-29",
+    "operation": "PutItem",
+    "key": {
+      "id":   $util.dynamodb.toDynamoDBJson($ctx.args.input.id)
+    },
+    "attributeValues": $util.dynamodb.toMapValuesJson($context.args.input),
+    "condition": $util.toJson($condition)
+  }
+  `),
+      responseMappingTemplate: MappingTemplate.dynamoDbResultItem(),
+    });
   }
 }
