@@ -10,8 +10,8 @@ type Room {
   id: ID!
   name: String
   messages(
-    sortDirection: ModelSortDirection,
-    limit: Int,
+    sortDirection: ModelSortDirection
+    limit: Int
     nextToken: String
   ): MessageConnection
   createdAt: AWSDateTime
@@ -23,7 +23,7 @@ type MessageConnection {
   nextToken: String
 }
 
-type ModelSortDirection {
+enum ModelSortDirection {
   ASC
   DESC
 }
@@ -35,7 +35,10 @@ type RoomConnection {
 
 type Query {
   getRoom(id: ID): Room
-  listMessageForRoom(roomId: ID, sortDirection: ModelSortDirection): MessageConnection
+  listMessagesForRoom(
+    roomId: ID
+    sortDirection: ModelSortDirection
+  ): MessageConnection
   listRooms(limit: Int): RoomConnection
 }
 
@@ -59,5 +62,6 @@ input RoomInput {
 
 type Subscription {
   onCreateRoom: Room @aws_subscribe(mutations: ["createRoom"])
-  onCreateMessageByRoomId(roomId: ID): Message @aws_subscribe(mutations: ["createMessage"])
+  onCreateMessageByRoomId(roomId: ID): Message
+    @aws_subscribe(mutations: ["createMessage"])
 }

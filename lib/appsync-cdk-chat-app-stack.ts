@@ -112,6 +112,7 @@ export class AppsyncCdkChatAppStack extends cdk.Stack {
           userPoolConfig: { userPool },
         },
       },
+      xrayEnabled: true,
     });
 
     new cdk.CfnOutput(this, 'GraphQLAPIURL', {
@@ -125,11 +126,12 @@ export class AppsyncCdkChatAppStack extends cdk.Stack {
     // Resolvers Method
     messageTableDs.createResolver({
       typeName: 'Query',
-      fieldName: 'listMessageForRoom',
+      fieldName: 'listMessagesForRoom',
       requestMappingTemplate: MappingTemplate.fromString(`
         {
           "version": "2017-02-28",
           "operation": "Query",
+          "index" : "messages-by-room-id",
           "query": {
             "expression": "roomId = :roomId",
             "expressionValue": {
@@ -164,7 +166,7 @@ export class AppsyncCdkChatAppStack extends cdk.Stack {
           $util.qr($context.args.input.put("id", $util.defaultIfNull($ctx.args.input.id, $util.autoId())))
         ## Automatically set the createdAt timestamp.
         #set( $createdAt = $util.time.nowISO8601() )
-          util.qr($context.args.input.put("createdAt", $util.defaultIfNull($ctx.args.input.createdAt, $createdAt)))
+          $util.qr($context.args.input.put("createdAt", $util.defaultIfNull($ctx.args.input.createdAt, $createdAt)))
         ## Automatically set the user's username on owner field.
           $util.qr($ctx.args.input.put("owner", $context.identity.username))
         ## Create a condition that will error if the id already exists
